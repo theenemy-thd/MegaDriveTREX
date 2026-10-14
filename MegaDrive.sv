@@ -614,7 +614,9 @@ md_board md_board
 	.dma_68k_req(dma_68k_req),
 	.dma_z80_req(dma_z80_req),
 	.dma_z80_ack(dma_z80_ack),
-	.res_z80(res_z80)
+	.res_z80(res_z80),
+
+	.spr_unlimited(status[67])
 );
 
 dpram #(15,16) ram_68k

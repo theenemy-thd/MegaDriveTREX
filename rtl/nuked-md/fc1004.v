@@ -208,7 +208,17 @@ module fc1004
 	output vdp_vsync2,
 	input ym2612_status_enable,
 	output vdp_dma_oe_early,
-	output vdp_dma
+	output vdp_dma,
+	// TREX sprite helper
+	output [9:0] spr_line_y,
+	output       spr_disp,
+	output [5:0] spr_lb_idx,
+	output [7:0] spr_reg_at,
+	output       spr_h40,
+	output       spr_im2,
+	input        spr_ov_en,
+	input [55:0] spr_ov_data,
+	input  [7:0] spr_ov_valid
 	);
 	
 	wire vdp_ys; // w1009
@@ -376,7 +386,16 @@ module fc1004
 		.vdp_vsync2(vdp_vsync2),
 		.vdp_cramdot_dis(vdp_cramdot_dis),
 		.vdp_dma_oe_early(vdp_dma_oe_early),
-		.vdp_dma(vdp_dma)
+		.vdp_dma(vdp_dma),
+		.spr_line_y(spr_line_y),
+		.spr_disp(spr_disp),
+		.spr_lb_idx(spr_lb_idx),
+		.spr_reg_at(spr_reg_at),
+		.spr_h40(spr_h40),
+		.spr_im2(spr_im2),
+		.spr_ov_en(spr_ov_en),
+		.spr_ov_data(spr_ov_data),
+		.spr_ov_valid(spr_ov_valid)
 		);
 	
 	ym3438 fm

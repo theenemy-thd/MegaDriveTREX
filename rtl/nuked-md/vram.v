@@ -12,7 +12,11 @@ module vram
 	output reg [7:0] RD_o,
 	output RD_d,
 	output [7:0] SD_o,
-	output SD_d
+	output SD_d,
+	// TREX: write snoop for the sprite helper's shadow VRAM
+	output snoop_we,
+	output [15:0] snoop_addr,
+	output [7:0] snoop_data
 	);
 	
 	reg [15:0] addr;
@@ -63,6 +67,10 @@ module vram
 	endgenerate
 	
 	assign RD_d = ~o_valid;
+
+	assign snoop_we = wr;
+	assign snoop_addr = addr;
+	assign snoop_data = RD_i;
 	assign SD_d = SE;
 	
 	reg [7:0] vram_ser;

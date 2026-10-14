@@ -115,7 +115,17 @@ module ym7101
 	output vdp_vsync2,
 	input  vdp_cramdot_dis,
 	output vdp_dma_oe_early,
-	output vdp_dma
+	output vdp_dma,
+	// TREX sprite helper
+	output [9:0] spr_line_y,
+	output       spr_disp,
+	output [5:0] spr_lb_idx,
+	output [7:0] spr_reg_at,
+	output       spr_h40,
+	output       spr_im2,
+	input        spr_ov_en,
+	input [55:0] spr_ov_data,
+	input  [7:0] spr_ov_valid
 	);
 
 	wire cpu_sel;
@@ -1854,6 +1864,7 @@ module ym7101
 	wire [1:0] linebuffer_out_pal[0:7];
 	wire linebuffer_out_priority[0:7];
 	wire [3:0] linebuffer_out_index[0:7];
+	wire [55:0] linebuffer_disp; // TREX
 
 	wire l564;
 	wire l565;
@@ -5887,13 +5898,13 @@ module ym7101
 	generate
 		for (gi = 0; gi < 8; gi = gi + 1)
 		begin : gl1
-			assign load_val_pal0[gi] = linebuffer_out_pal[gi][0];
-			assign load_val_pal1[gi] = linebuffer_out_pal[gi][1];
-			assign load_val_priority[gi] = linebuffer_out_priority[gi];
-			assign load_val_index0[gi] = linebuffer_out_index[gi][0];
-			assign load_val_index1[gi] = linebuffer_out_index[gi][1];
-			assign load_val_index2[gi] = linebuffer_out_index[gi][2];
-			assign load_val_index3[gi] = linebuffer_out_index[gi][3];
+			assign load_val_pal0[gi] = linebuffer_disp[gi*7+1];
+			assign load_val_pal1[gi] = linebuffer_disp[gi*7+2];
+			assign load_val_priority[gi] = linebuffer_disp[gi*7];
+			assign load_val_index0[gi] = linebuffer_disp[gi*7+3];
+			assign load_val_index1[gi] = linebuffer_disp[gi*7+4];
+			assign load_val_index2[gi] = linebuffer_disp[gi*7+5];
+			assign load_val_index3[gi] = linebuffer_disp[gi*7+6];
 		end
 	endgenerate
 	
@@ -6106,6 +6117,27 @@ module ym7101
 	assign linebuffer_data_in[55:52] = l530;
 	
 	wire [55:0] linebuffer_out2 = w817 ? linebuffer_out : ~56'h0;
+
+	// TREX: Sprite Limit Off. Where the VDP has no sprite pixel, the display
+	// readout takes the helper renderer's pixel (same 7-bit format).
+	assign spr_line_y = w653;
+	assign spr_disp   = w823;
+	assign spr_lb_idx = linebuffer_index;
+	assign spr_reg_at = reg_at;
+	assign spr_h40    = reg_rs1;
+	assign spr_im2    = w106;
+
+	reg spr_ov_sel = 1'h0;
+	always @(posedge MCLK) spr_ov_sel <= spr_ov_en & reg_m5 & w823 & (linebuffer_index < 6'd40);
+
+	generate
+		for (gi = 0; gi < 8; gi = gi + 1)
+		begin : gl_ov
+			assign linebuffer_disp[gi*7+6:gi*7] =
+				(spr_ov_sel & spr_ov_valid[gi] & (linebuffer_out2[gi*7+6:gi*7+3] == 4'h0)) ?
+				spr_ov_data[gi*7+6:gi*7] : linebuffer_out2[gi*7+6:gi*7];
+		end
+	endgenerate
 	
 	generate
 		for (gi = 0; gi < 8; gi = gi + 1)

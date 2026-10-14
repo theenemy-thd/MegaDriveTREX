@@ -134,8 +134,8 @@ module md_board
 	output dma_z80_ack,
 	output res_z80,
 	output vdp_dma_oe_early,
-	output vdp_dma
-	
+	output vdp_dma,
+	input spr_unlimited // TREX: Sprite Limit Off
 	);
 	
 	wire [7:0] SD;
@@ -495,7 +495,16 @@ module md_board
 		.vdp_vsync2(vdp_vsync2),
 		.ym2612_status_enable(ym2612_status_enable),
 		.vdp_dma_oe_early(vdp_dma_oe_early),
-		.vdp_dma(vdp_dma)
+		.vdp_dma(vdp_dma),
+		.spr_line_y(spr_line_y),
+		.spr_disp(spr_disp),
+		.spr_lb_idx(spr_lb_idx),
+		.spr_reg_at(spr_reg_at),
+		.spr_h40(spr_h40),
+		.spr_im2(spr_im2),
+		.spr_ov_en(spr_unlimited),
+		.spr_ov_data(spr_ov_data),
+		.spr_ov_valid(spr_ov_valid)
 		);
 	
 	assign fm_sel23 = TEST0_o;
@@ -628,6 +637,33 @@ module md_board
 	assign z80_bus_do = ZD;
 `endif
 
+	wire [9:0] spr_line_y;
+	wire spr_disp;
+	wire [5:0] spr_lb_idx;
+	wire [7:0] spr_reg_at;
+	wire spr_h40, spr_im2;
+	wire [55:0] spr_ov_data;
+	wire [7:0] spr_ov_valid;
+	wire vram_snoop_we;
+	wire [15:0] vram_snoop_addr;
+	wire [7:0] vram_snoop_data;
+
+	md_spr_extra spr_extra
+		(
+		.clk(MCLK2),
+		.vram_we(vram_snoop_we),
+		.vram_addr(vram_snoop_addr),
+		.vram_data(vram_snoop_data),
+		.reg_at(spr_reg_at),
+		.h40(spr_h40),
+		.im2(spr_im2),
+		.line_y(spr_line_y),
+		.disp(spr_disp),
+		.rd_idx(spr_lb_idx),
+		.rd_data(spr_ov_data),
+		.rd_valid(spr_ov_valid)
+		);
+
 	wire [7:0] vram1_AD_o;
 	wire vram1_AD_d;
 	wire [7:0] vram1_SD_o;
@@ -647,7 +683,10 @@ module md_board
 		.RD_o(vram1_AD_o),
 		.RD_d(vram1_AD_d),
 		.SD_o(vram1_SD_o),
-		.SD_d(vram1_SD_d)
+		.SD_d(vram1_SD_d),
+		.snoop_we(vram_snoop_we),
+		.snoop_addr(vram_snoop_addr),
+		.snoop_data(vram_snoop_data)
 		);
 
 `ifdef VRAM_128K
