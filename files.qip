@@ -20,6 +20,7 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/teamplayer.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/fourway.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/md_io.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/cartridge.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/m68k_clkgen.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/md_plus.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mdp_audio.sv
 set_global_assignment -name SYSTEMVERILOG_FILE hps_ext.sv

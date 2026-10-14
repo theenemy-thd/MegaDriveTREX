@@ -1,0 +1,10 @@
+obj*/
+src/
+work/
+log_*.txt
+*.wlf
+transcript
+68k_*code.txt
+clkgen_alt.sv
+vbuild_alt.sh
+fixdecl.py

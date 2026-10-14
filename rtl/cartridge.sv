@@ -53,6 +53,8 @@ module cartridge
 	input             cart_time,
 	output            cart_data_en,
 	output            cart_dtack,
+	output            cart_rom_wait,  // TREX: ROM read still waiting for SDRAM
+	output            cart_svp,       // TREX: SVP cart (68K overclock off)
 	input             cart_dma,
 
 	input      [14:0] save_addr,
@@ -167,16 +169,22 @@ wire        rom_ack;
 wire [15:0] rom_data;
 reg         rom_rd;
 reg         dtack_ext;
+reg         rom_ready;
+
+assign cart_rom_wait = sdram_rd & rom_data_req & ~rom_ready;
+assign cart_svp = svp_quirk;
 
 always @(posedge clk_ram) begin
 	reg rd_old, we_old;
 	
 	if(~sdram_rd) dtack_ext <= 0;
+	if(~sdram_rd) rom_ready <= 0;
 
 	if(rom_req == rom_ack) begin
 		if(rom_rd) begin
 			cart_data <= rom_data;
 			if(cart_cs_ext) dtack_ext <= 1;
+			rom_ready <= sdram_rd;
 		end
 		rom_rd <= 0;
 	end
@@ -187,6 +195,7 @@ always @(posedge clk_ram) begin
 		rom_addr <= (cart_ms ? ms_cart_addr : md_cart_addr) & rom_mask[24:1];
 		rom_req <= ~rom_req;
 		rom_rd <= sdram_rd;
+		rom_ready <= 0;
 	end
 
 	if(ms_boot_cs)     cart_data <= ms_boot_data;

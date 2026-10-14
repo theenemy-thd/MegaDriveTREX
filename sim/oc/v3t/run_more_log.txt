@@ -1,0 +1,10 @@
+limit On h40: identical (4591 PIX runs)
+limit On h32: identical (3794 PIX runs)
+limit On mask: identical (4378 PIX runs)
+limit On h32_mask: identical (3794 PIX runs)
+OC benches identical
++PERIOD=0: RESULT period=0 arb=0 hold=1 lat=10 status=  OK cycles=114194 fetches=975 d2=6739857d d1=cb362000 z80sum=c6339c38 vramsum=3b2bd778 dmasum=02b82508 vdp=3208 ram0=12345678 ram7=38ba3c60 ramsum=cb9f5e8c
++PERIOD=10 +ARB=1 +SLOW=1: RESULT period=10 arb=1 hold=1 lat=10 status=  OK cycles=96422 fetches=975 d2=6739857d d1=cb362000 z80sum=c6339c38 vramsum=3b2bd778 dmasum=02b82508 vdp=3208 ram0=12345678 ram7=38ba3c60 ramsum=cb9f5e8c
++PERIOD=8 +ARB=1 +SLOW=1: RESULT period=8 arb=1 hold=1 lat=10 status=  OK cycles=83404 fetches=975 d2=6739857d d1=cb362000 z80sum=c6339c38 vramsum=3b2bd778 dmasum=02b82508 vdp=3208 ram0=12345678 ram7=38ba3c60 ramsum=cb9f5e8c
++PERIOD=6 +ARB=1 +SLOW=1: RESULT period=6 arb=1 hold=1 lat=10 status=  OK cycles=73630 fetches=975 d2=6739857d d1=cb362000 z80sum=c6339c38 vramsum=3b2bd778 dmasum=02b82508 vdp=3208 ram0=12345678 ram7=38ba3c60 ramsum=cb9f5e8c
++PERIOD=6 +ARB=1: RESULT period=6 arb=1 hold=1 lat=10 status=  OK cycles=61416 fetches=981 d2=6739857d d1=cb362000 z80sum=c6339c38 vramsum=3b2bd778 dmasum=02b82508 vdp=3208 ram0=12345678 ram7=38ba3c60 ramsum=cb9f5e8c

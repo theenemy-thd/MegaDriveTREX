@@ -60,6 +60,7 @@ module md_board
 	output cart_dma, // BGACK
 	input cart_m3_pause,
 	input ext_dtack,
+	input ext_dtack_hold, // TREX: hold off the arbiter's DTACK (cart data not ready yet)
 	input pal,
 	input jap,
 	
@@ -85,6 +86,7 @@ module md_board
 	output ext_ZCLK_o,
 	input ext_VCLK_i,
 	input ext_ZCLK_i,
+	input ext_VCLK_arb_i, // TREX: clock for the arbiter and I/O chip (stock VCLK unless overclocked)
 `endif
 	
 	// video
@@ -413,7 +415,11 @@ module md_board
 		.ZA_d(ym_ZA_d),
 		.SRES(SRES),
 		.SEL1(SEL1),
+`ifndef EXT_CLOCKS
 		.CLK_i(VCLK),
+`else
+		.CLK_i(ext_VCLK_arb_i),
+`endif
 		.CLK_o(VCLK_o),
 		.CLK_d(VCLK_d),
 		.SBCR(SBCR),
@@ -775,7 +781,7 @@ module md_board
 			(~z80_ZA_d & z80_ZA_o) |
 			((ym_ZA_d & z80_ZA_d) & ZA);
 	
-		DTACK <= ~ym_DTACK_pull & ~ext_dtack;
+		DTACK <= ~(ym_DTACK_pull & ~ext_dtack_hold) & ~ext_dtack;
 	
 		BGACK <= ~ym_BGACK_pull;
 	

@@ -83,6 +83,9 @@ localparam CONF_STR = {
 	"O[9:8],Auto Region,Header,File Ext,Disabled;",
 	"D2O[28:27],Priority,US>EU>JP,EU>US>JP,US>JP>EU,JP>US>EU;",
 	"d7O[12],TMSS,Disabled,Enabled;",
+	"-;",
+	"O[66:64],68K Speed,Stock 7.6MHz,10.7MHz,13.4MHz,17.9MHz,17.9MHz Unsafe;",
+	"O[67],Sprite Limit,On,Off;",
 	
 	"-;",
 	"C,Cheats;",
@@ -376,14 +379,48 @@ always @(posedge clk_sys) begin
 	if(&sreset) sys_reset <= 1;
 end
 
-reg vclk_en, zclk_en, clk_en;
+// TREX: 68000 overclock. Only the 68000 (and the bus arbiter / I/O chip that
+// talk to it) get the faster clock; VDP, Z80, YM2612 and PSG keep stock timing.
+// At Stock the 68000 and arbiter clocks are exactly the stock core's.
+// Accesses to the Z80 area ($A00000-$A1FFFF: Z80 RAM, YM2612, bus request and
+// reset) drop back to stock speed for a while so sound handshakes keep their
+// original timing; the Unsafe setting skips that.
+// 17.9 MHz (3+3 clk_md per clock) is the fastest the Nuked 68000 runs correctly.
+reg  [3:0] cpu_period;
+always @(*) begin
+	case(status[66:64])
+		1: cpu_period = 4'd10; // 10.74 MHz
+		2: cpu_period = 4'd8;  // 13.42 MHz
+		3: cpu_period = 4'd6;  // 17.90 MHz
+		4: cpu_period = 4'd6;  // 17.90 MHz, no stock-speed sound accesses
+		default: cpu_period = 4'd0; // stock 7.67 MHz
+	endcase
+end
+
+reg [10:0] cpu_slow;
 always @(posedge clk_md) begin
-	reg old_vclk, old_zclk;
+	if(m68k_addr[23:17] == 7'b1010000 && status[66:64] != 3'd4) cpu_slow <= '1;
+	else if(cpu_slow) cpu_slow <= cpu_slow - 1'd1;
+end
+
+wire cart_svp;
+wire cpu_clk, arb_clk, cpu_fast;
+m68k_clkgen m68k_clkgen
+(
+	.clk(clk_md),
+	.period((cart_ms | cart_svp | |cpu_slow) ? 4'd0 : cpu_period),
+	.run(~cart_download),
+	.VCLK(VCLK),
+	.cpu_clk(cpu_clk),
+	.arb_clk(arb_clk),
+	.fast(cpu_fast)
+);
+
+reg zclk_en, clk_en;
+always @(posedge clk_md) begin
+	reg old_zclk;
 	
 	clk_en <= ~cart_download;
-	
-	old_vclk <= VCLK;
-	if(old_vclk & ~VCLK) vclk_en <= clk_en;
 
 	old_zclk <= ZCLK;
 	if(old_zclk & ~ZCLK) zclk_en <= clk_en;
@@ -417,6 +454,7 @@ wire [15:0] cart_data_wr;
 wire [15:0] cart_data_rom;
 wire        cart_data_en_rom;
 wire        cart_dtack_rom;
+wire        cart_rom_wait;
 
 // MD+ overlay outputs
 wire        mdp_data_en;
@@ -511,7 +549,8 @@ md_board md_board
 
 	.ext_VCLK_o(VCLK),
 	.ext_ZCLK_o(ZCLK),
-	.ext_VCLK_i(VCLK & vclk_en),
+	.ext_VCLK_i(cpu_clk),
+	.ext_VCLK_arb_i(arb_clk),
 	.ext_ZCLK_i(ZCLK & zclk_en),
 
 	// cart
@@ -530,6 +569,7 @@ md_board md_board
 	//.cart_dma(cart_dma),
 	.vdp_dma(cart_dma),
 	.ext_dtack(cart_dtack),
+	.ext_dtack_hold(cpu_fast & cart_rom_wait),
 	.pal(PAL),
 	.jap(JAP),
 
@@ -665,6 +705,8 @@ cartridge cartridge
 	.cart_uwr(cart_uwr),
 	.cart_time(cart_time),
 	.cart_dtack(cart_dtack_rom),
+	.cart_rom_wait(cart_rom_wait),
+	.cart_svp(cart_svp),
 	.cart_dma(cart_dma),
 
 	.save_addr({sd_lba[6:0],sd_buff_addr}),
