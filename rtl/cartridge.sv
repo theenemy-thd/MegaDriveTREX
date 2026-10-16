@@ -206,6 +206,7 @@ always @(posedge clk_ram) begin
 	if(pier_eeprom_cs) cart_data <= pier_eeprom_data;
 	if(md_eeprom_cs)   cart_data <= md_eeprom_data;
 	if(jcart_cs)       cart_data <= jcart_data;
+	if(svp_sram_cs)    cart_data <= {svp_sram_q,svp_sram_q};
 	if(svp_cs)         cart_data <= svp_data;
 	if(sf_cs)          cart_data <= sf_data;
 	if(chk_cs)         cart_data <= chk_data;
@@ -284,8 +285,29 @@ dpram_dif #(17,8,16,16) ram
 	.q_b(sram2_q)
 );
 
-assign save_do     = sram2_q;
-assign save_change = sram_wren;
+// TREX: SVP carts use the save RAM above as SVP DRAM, so give them a
+// separate 8KB battery RAM at $200001-$203FFF (odd bytes), e.g. Virtua Racing [SRAM]
+wire        svp_sram_cs   = svp_quirk && ~cart_ms && (cart_addr[23:14] == 10'b0000100000);
+wire        svp_sram_wren = svp_sram_cs & cart_lwr;
+wire  [7:0] svp_sram_q;
+wire [15:0] svp_sram2_q;
+
+dpram_dif #(13,8,12,16) svp_sram
+(
+	.clock(clk),
+	.address_a(cart_addr[13:1]),
+	.data_a(cart_data_wr[7:0]),
+	.wren_a(svp_sram_wren),
+	.q_a(svp_sram_q),
+
+	.address_b(cart_dl ? ram_rst_a[12:1] : save_addr[11:0]),
+	.data_b(cart_dl ? 16'hFFFF : save_di),
+	.wren_b(cart_dl | (save_wr & ~|save_addr[14:12])),
+	.q_b(svp_sram2_q)
+);
+
+assign save_do     = svp_quirk ? (|save_addr[14:12] ? 16'hFFFF : svp_sram2_q) : sram2_q;
+assign save_change = svp_quirk ? svp_sram_wren : sram_wren;
 
 //---------------------- MD cart ---------------------------------------
 
