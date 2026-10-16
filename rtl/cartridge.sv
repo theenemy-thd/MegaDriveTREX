@@ -287,7 +287,7 @@ dpram_dif #(17,8,16,16) ram
 
 // TREX: SVP carts use the save RAM above as SVP DRAM, so give them a
 // separate 8KB battery RAM at $200001-$203FFF (odd bytes), e.g. Virtua Racing [SRAM]
-wire        svp_sram_cs   = svp_quirk && ~cart_ms && (cart_addr[23:14] == 10'b0000100000);
+wire        svp_sram_cs   = svp_quirk && ~cart_ms && (cart_addr[23:14] == 10'b0010000000);   // $200000-$203FFF
 wire        svp_sram_wren = svp_sram_cs & cart_lwr;
 wire  [7:0] svp_sram_q;
 wire [15:0] svp_sram2_q;
