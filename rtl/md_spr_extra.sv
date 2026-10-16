@@ -138,8 +138,9 @@ reg  [1:0] col;            // cell column being drawn
 reg [15:0] pat;
 reg  [9:0] sx;             // screen x of the current cell (signed 10 bit)
 reg        nonzero_x;      // a sprite with X != 0 was seen on this line
-reg [31:0] pix;
+reg [31:0] pix;            // cell pixels, next pixel in [31:28] (hflip applied on load)
 reg  [2:0] pn;
+reg  [9:0] px;             // screen x of the pixel being written (= sx + pn, registered for timing)
 reg  [9:0] ly;
 
 wire [6:0] max_spr = h40 ? 7'd80 : 7'd64;
@@ -164,9 +165,9 @@ wire [10:0] c_tile  = pat[10:0] + c_col * (vs + 1'd1) + c_cell;
 wire [15:0] c_addr  = im2 ? {c_tile[9:0], c_line, 2'b00} : {c_tile, c_line[2:0], 2'b00};
 
 // pixel being written
-wire [2:0] pp     = pat[11] ? (3'd7 - pn) : pn;
-wire [3:0] pv     = pix[31 - pp*4 -: 4];
-wire [9:0] px     = sx + pn;
+wire [3:0] pv     = pix[31:28];
+wire [31:0] sh_word_hf = {sh_word[3:0],   sh_word[7:4],   sh_word[11:8],  sh_word[15:12],
+                          sh_word[19:16], sh_word[23:20], sh_word[27:24], sh_word[31:28]};
 
 always @(posedge clk) begin
 	lb_we <= 0;
@@ -218,8 +219,9 @@ always @(posedge clk) begin
 		S_CELLW: state <= S_CELLD;
 
 		S_CELLD: begin
-				pix <= sh_word;
+				pix <= pat[11] ? sh_word_hf : sh_word;
 				pn <= 0;
+				px <= sx;
 				state <= S_PIX;
 			end
 
@@ -231,7 +233,9 @@ always @(posedge clk) begin
 					lb_wlane <= px[2:0];
 					lb_wdata <= {pv, pat[14:13], pat[15]};
 				end
+				pix <= {pix[27:0], 4'h0};
 				pn <= pn + 1'd1;
+				px <= px + 1'd1;
 				if(pn == 7) begin
 					sx <= sx + 10'd8;
 					col <= col + 1'd1;
