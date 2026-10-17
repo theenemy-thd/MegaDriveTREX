@@ -90,6 +90,7 @@ always @(posedge clk) begin
 end
 
 reg        lb_we;
+reg  [1:0] lb_wbank;
 reg  [5:0] lb_widx;
 reg  [2:0] lb_wlane;
 reg  [6:0] lb_wdata;
@@ -103,7 +104,7 @@ generate
 	for(gp = 0; gp < 8; gp = gp + 1) begin : lanes
 		reg [6:0] mem[256];
 		always @(posedge clk) begin
-			if(lb_we && lb_wlane == gp) mem[{rbank, lb_widx}] <= lb_wdata;
+			if(lb_we && lb_wlane == gp) mem[{lb_wbank, lb_widx}] <= lb_wdata;
 			lb_q[gp] <= mem[{dbank, rd_idx}];
 		end
 	end
@@ -143,6 +144,14 @@ reg  [2:0] pn;
 reg  [9:0] px;             // screen x of the pixel being written (= sx + pn, registered for timing)
 reg  [9:0] ly;
 
+// pixel write, split over two clocks for timing: S_PIX checks the occupancy flag,
+// the next clock sets it and writes the line buffer. Consecutive S_PIX clocks always
+// have different px, and a later sprite reaches the same px at least 3 clocks later.
+reg        pw_go;
+reg  [1:0] pw_bank;
+reg  [8:0] pw_px;
+reg  [6:0] pw_data;
+
 wire [6:0] max_spr = h40 ? 7'd80 : 7'd64;
 wire [9:0] width   = h40 ? 10'd320 : 10'd256;
 
@@ -171,6 +180,7 @@ wire [31:0] sh_word_hf = {sh_word[3:0],   sh_word[7:4],   sh_word[11:8],  sh_wor
 
 always @(posedge clk) begin
 	lb_we <= 0;
+	pw_go <= 0;
 
 	case(state)
 		S_IDLE: ;
@@ -226,13 +236,10 @@ always @(posedge clk) begin
 			end
 
 		S_PIX: begin
-				if(pv != 0 && !px[9] && px < width && !occ[rbank][px]) begin
-					occ[rbank][px] <= 1;
-					lb_we    <= 1;
-					lb_widx  <= px[8:3];
-					lb_wlane <= px[2:0];
-					lb_wdata <= {pv, pat[14:13], pat[15]};
-				end
+				pw_go   <= pv != 0 && !px[9] && px < width && !occ[rbank][px];
+				pw_bank <= rbank;
+				pw_px   <= px[8:0];
+				pw_data <= {pv, pat[14:13], pat[15]};
 				pix <= {pix[27:0], 4'h0};
 				pn <= pn + 1'd1;
 				px <= px + 1'd1;
@@ -258,8 +265,19 @@ always @(posedge clk) begin
 		cnt <= 0;
 		nonzero_x <= 0;
 		occ[nbank] <= '0;
-		lb_we <= 0;
+		pw_go <= 0;
 		state <= S_SAT0;
+	end
+
+	// second half of the pixel write (a pixel decided before a new line still lands
+	// in its own bank)
+	if(pw_go) begin
+		occ[pw_bank][pw_px] <= 1;
+		lb_we    <= 1;
+		lb_wbank <= pw_bank;
+		lb_widx  <= pw_px[8:3];
+		lb_wlane <= pw_px[2:0];
+		lb_wdata <= pw_data;
 	end
 end
 
