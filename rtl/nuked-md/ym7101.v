@@ -2548,15 +2548,23 @@ module ym7101
 	
 	assign w37 = ~cpu_as;
 	
-	ym7101_dff dff12(.MCLK(MCLK), .clk(w37), .inp(1'h1), .rst(w10), .outp(dff12_l2));
+	// TREX: upstream loop cut (from 2dc570d). dff12 before its reset clears dff13
+	// as in the chip; the stock loop had no stable state, so its result depended
+	// on routing and broke CPU writes to the VDP when the 68000 was overclocked.
+	wire dff12_nr;
+	ym7101_dff dff12(.MCLK(MCLK), .clk(w37), .inp(1'h1), .rst(w10), .outp(dff12_l2), .outp_nr(dff12_nr));
+
+	assign w38 = reset_comb | dff12_nr;
 	
-	assign w38 = dff12_l2 | reset_comb;
-	
-	ym7101_dff dff13(.MCLK(MCLK), .clk(w34), .inp(w44), .rst(w38), .outp(dff13_l2));
+	// dff13's clock without the loop through dff15's reset. it differs only when a
+	// refresh and a CPU access start on one clock, and then the refresh wins
+	wire dff15_nr;
+	wire w34_13 = w2 & cpu_as & (reset_comb | dff21_l2 | ~dff15_nr);
+	ym7101_dff dff13(.MCLK(MCLK), .clk(w34_13), .inp(w44), .rst(w38), .outp(dff13_l2));
 	
 	ym7101_dff dff14(.MCLK(MCLK), .clk(cpu_clk1), .inp(w43), .rst(1'h0), .outp(dff14_l2));
 	
-	ym7101_dff dff15(.MCLK(MCLK), .clk(dff14_l2), .inp(w44), .rst(w31), .outp(dff15_l2));
+	ym7101_dff dff15(.MCLK(MCLK), .clk(dff14_l2), .inp(w44), .rst(w31), .outp(dff15_l2), .outp_nr(dff15_nr));
 	
 	assign w39 = ~dff15_l2;
 	
@@ -7313,6 +7321,7 @@ endmodule*/
 
 module ym7101_dff #(parameter DATA_WIDTH = 1)
 	(
+	output [DATA_WIDTH-1:0] outp_nr,
 	input MCLK,
 	input clk,
 	input [DATA_WIDTH-1:0] inp,
@@ -7325,6 +7334,7 @@ module ym7101_dff #(parameter DATA_WIDTH = 1)
 	wire [DATA_WIDTH-1:0] l2_assign = rst ? {DATA_WIDTH{1'h0}} : (clk ? l1 : l2);
 	
 	assign outp = l2_assign;
+	assign outp_nr = clk ? l1 : l2;
 	//assign outp = l2;
 	
 	always @(posedge MCLK)

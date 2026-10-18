@@ -25,12 +25,16 @@ module tb;
 	reg         tog = 0;
 	integer     tcnt = 0;
 	always @(posedge clk) begin
-		if(SLOW != 0 && m68k_addr[22:16] == 7'b1010000) cpu_slow <= '1;
+		if((SLOW != 0 && m68k_addr[22:16] == 7'b1010000) || (DMAS == 4 && m68k_addr[22:20] == 3'b110) || (DMAS == 6 && m68k_addr[22:20] == 3'b110 && m68k_addr[2:1] == 2'b01)) cpu_slow <= '1;
 		else if(cpu_slow != 0) cpu_slow <= cpu_slow - 1'd1;
 		tcnt <= tcnt + 1;
 		if(TOGGLE != 0 && tcnt % TOGGLE == 0) tog <= ~tog;
 	end
-	wire [3:0] period_now = (cpu_slow != 0 || tog) ? 4'd0 : PERIOD[3:0];
+	integer DMAS = 0;   // +DMAS=1: stock speed while the VDP owns the 68k bus (vdp_dma), 2: while BR is asserted
+	initial if($value$plusargs("DMAS=%d", DMAS)) ;
+	wire vdp_dma;
+	wire dma_slow = (DMAS == 1 && vdp_dma) || (DMAS == 2 && !md_board.BR) || (DMAS == 3 && (vdp_dma || !md_board.BR || !md_board.BGACK));
+	wire [3:0] period_now = (cpu_slow != 0 || tog || dma_slow) ? 4'd0 : PERIOD[3:0];
 	parameter MAXCYC  = 3000000;
 	parameter DBG     = 0;
 
@@ -125,7 +129,7 @@ module tb;
 		.PA_i(7'h7F), .PA_o(PA_o), .PA_d(PA_d), .PB_i(7'h7F), .PB_o(PB_o), .PB_d(PB_d), .PC_i(7'h7F), .PC_o(PC_o), .PC_d(PC_d),
 		.vdp_hclk1(vhclk1), .vdp_intfield(), .vdp_de_h(vde_h), .vdp_de_v(vde_v), .vdp_m5(), .vdp_rs1(), .vdp_m2(), .vdp_lcb(), .vdp_psg_clk1(),
 		.vdp_cramdot_dis(1'b1), .fm_clk1(), .vdp_hsync2(), .vdp_vsync2(), .ym2612_status_enable(1'b0),
-		.dma_68k_req(1'b0), .dma_z80_req(1'b0), .dma_z80_ack(), .res_z80(), .vdp_dma_oe_early(cart_oe), .vdp_dma(), .spr_unlimited(SPRU != 0)
+		.dma_68k_req(1'b0), .dma_z80_req(1'b0), .dma_z80_ack(), .res_z80(), .vdp_dma_oe_early(cart_oe), .vdp_dma(vdp_dma), .spr_unlimited(SPRU != 0)
 	);
 
 	// results: work RAM $FF8000.. is word address 0x4000..
@@ -136,7 +140,7 @@ module tb;
 			fetches = fetches + 1;
 			if(first_fetch < 0) begin first_fetch = cyc; $display("first fetch at %0d", cyc); end
 		end
-		if(ram_68k_wren && (ram_68k_data == 16'h600D || ram_68k_data == 16'h0BAD) && ram_68k_byteena == 2'b11) begin
+		if(ram_68k_wren && ram_68k_address == 15'h6010 && (ram_68k_data == 16'h600D || ram_68k_data == 16'h0BAD) && ram_68k_byteena == 2'b11) begin
 			fin = ram_68k_data;
 			$display("RESULT period=%0d arb=%0d hold=%0d lat=%0d status=%s cycles=%0d fetches=%0d d2=%04X%04X d1=%04X%04X z80sum=%04X%04X vramsum=%04X%04X dmasum=%04X%04X vdp=%04X ram0=%04X%04X ram7=%04X%04X ramsum=%08X",
 				PERIOD, ARB, HOLD, LAT, fin == 16'h600D ? "OK" : "TRAP", cyc - first_wr, fetches,
@@ -207,6 +211,15 @@ module tb;
 			$display("SPX %0d sat cur=%0d addr=%04X", cyc, md_board.spr_extra.cur, md_board.spr_extra.sat_addr);
 		if(PROBE != 0 && frame == 3 && aline >= LINE - 2 && aline <= LINE && md_board.spr_extra.state == 3 && md_board.spr_extra.cur < 3)
 			$display("SPX %0d word0=%08X ly=%03X yrow=%03X", cyc, md_board.spr_extra.sh_word, md_board.spr_extra.ly, md_board.spr_extra.y_row);
+	end
+
+	// +VLOG=1: log every VRAM chip write (address, data) as it settles
+	integer VLOG = 0, vfd = 0;
+	reg vwe_old = 0; reg [15:0] va_old; reg [7:0] vd_old;
+	initial if($value$plusargs("VLOG=%d", VLOG)) vfd = $fopen("vlog.txt", "w");
+	always @(posedge clk) if(VLOG != 0) begin
+		vwe_old <= md_board.vram_snoop_we; va_old <= md_board.vram_snoop_addr; vd_old <= md_board.vram_snoop_data;
+		if(vwe_old & ~md_board.vram_snoop_we) $fdisplay(vfd, "%04X %02X", va_old, vd_old);
 	end
 
 	function [31:0] ramsum(input integer dummy);

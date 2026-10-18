@@ -400,6 +400,10 @@ end
 reg [10:0] cpu_slow;
 always @(posedge clk_md) begin
 	if(m68k_addr[23:17] == 7'b1010000 && status[66:64] != 3'd4) cpu_slow <= '1;
+	// VDP control port ($C00004-$C00007): a fast 68000 and arbiter lose the first
+	// word of a 68000->VRAM DMA that the write may start (found in sim), so the
+	// handover always happens at stock speed, Unsafe included.
+	if(m68k_addr[23:21] == 3'b110 && m68k_addr[3:2] == 2'b01) cpu_slow <= '1;
 	else if(cpu_slow) cpu_slow <= cpu_slow - 1'd1;
 end
 
