@@ -404,6 +404,10 @@ always @(posedge clk_md) begin
 	// word of a 68000->VRAM DMA that the write may start (found in sim), so the
 	// handover always happens at stock speed, Unsafe included.
 	if(m68k_addr[23:21] == 3'b110 && m68k_addr[3:2] == 2'b01) cpu_slow <= '1;
+	// PSG ($C00011-$C00017): the PSG takes a new byte only every couple of Z80
+	// clocks, so back-to-back writes from a fast 68000 get mixed up (Earthion's
+	// PSG silence burst left a 7.4 kHz tone at 13.4 MHz and up in sim).
+	if(m68k_addr[23:21] == 3'b110 && m68k_addr[4:3] == 2'b10) cpu_slow <= '1;
 	else if(cpu_slow) cpu_slow <= cpu_slow - 1'd1;
 end
 

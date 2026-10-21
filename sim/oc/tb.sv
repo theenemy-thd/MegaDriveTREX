@@ -9,6 +9,7 @@ module tb;
 	integer SLOW   = 0;   // +SLOW=1: Z80-area slowdown as in MegaDrive.sv
 	integer TOGGLE = 0;
 	integer SPRU   = 0;   // +SPRU=1: Sprite Limit Off
+	integer PSGS   = 0;   // +PSGS=1: stock-speed window after PSG writes
 	initial begin
 		if($value$plusargs("PERIOD=%d", PERIOD)) ;
 		if($value$plusargs("ARB=%d", ARB)) ;
@@ -17,6 +18,7 @@ module tb;
 		if($value$plusargs("SLOW=%d", SLOW)) ;
 		if($value$plusargs("TOGGLE=%d", TOGGLE)) ;
 		if($value$plusargs("SPRU=%d", SPRU)) ;
+		if($value$plusargs("PSGS=%d", PSGS)) ;
 	end
 
 	// same Z80-area slowdown as MegaDrive.sv, and an optional stress toggle of the speed
@@ -25,7 +27,7 @@ module tb;
 	reg         tog = 0;
 	integer     tcnt = 0;
 	always @(posedge clk) begin
-		if((SLOW != 0 && m68k_addr[22:16] == 7'b1010000) || (DMAS == 4 && m68k_addr[22:20] == 3'b110) || (DMAS == 6 && m68k_addr[22:20] == 3'b110 && m68k_addr[2:1] == 2'b01)) cpu_slow <= '1;
+		if((SLOW != 0 && m68k_addr[22:16] == 7'b1010000) || (DMAS == 4 && m68k_addr[22:20] == 3'b110) || (DMAS == 6 && m68k_addr[22:20] == 3'b110 && m68k_addr[2:1] == 2'b01) || (PSGS != 0 && m68k_addr[22:20] == 3'b110 && m68k_addr[3:2] == 2'b10)) cpu_slow <= '1;
 		else if(cpu_slow != 0) cpu_slow <= cpu_slow - 1'd1;
 		tcnt <= tcnt + 1;
 		if(TOGGLE != 0 && tcnt % TOGGLE == 0) tog <= ~tog;
@@ -80,6 +82,20 @@ module tb;
 		ram_z80_o <= zram[ram_z80_address];
 	end
 
+	// +GAME=1: run a real cartridge (rom_game.hex, up to 8MB, SSF mapper at $A130F3-$A130FF)
+	integer GAME = 0, FRAMES = 0, START1 = -1, START2 = -1;
+	reg [15:0] game[0:4194303];
+	reg [3:0]  ssf_bank[0:7];
+	initial begin
+		integer b;
+		for(b = 0; b < 8; b = b + 1) ssf_bank[b] = b;
+		if($value$plusargs("GAME=%d", GAME)) ;
+		if($value$plusargs("FRAMES=%d", FRAMES)) ;
+		if($value$plusargs("START1=%d", START1)) ;
+		if($value$plusargs("START2=%d", START2)) ;
+		if(GAME != 0) $readmemh("rom_game.hex", game);
+	end
+
 	// cartridge: data register updates LAT cycles after the read starts, like the SDRAM path
 	reg [15:0] rom[0:4095];
 	initial begin
@@ -99,7 +115,7 @@ module tb;
 		if(rd & ~rd_old) wait_cnt <= LAT;
 		else if(wait_cnt > 0) wait_cnt <= wait_cnt - 1;
 		else if(wait_cnt == 0) begin
-			cart_data <= rom[cart_address[11:0]];
+			cart_data <= (GAME != 0) ? game[{ssf_bank[cart_address[20:18]], cart_address[17:0]}] : rom[cart_address[11:0]];
 			ready <= 1;
 			wait_cnt <= -1;
 		end
@@ -116,7 +132,7 @@ module tb;
 		.ram_68k_wren(ram_68k_wren), .ram_68k_o(ram_68k_o),
 		.ram_z80_address(ram_z80_address), .ram_z80_data(ram_z80_data), .ram_z80_wren(ram_z80_wren), .ram_z80_o(ram_z80_o),
 		.M3(1'b1), .cart_data(cart_data), .cart_data_en(rd), .cart_address(cart_address), .cart_cs(cart_cs),
-		.cart_oe(), .cart_lwr(), .cart_uwr(), .cart_time(), .cart_cas2(), .cart_data_wr(), .cart_dma(),
+		.cart_oe(), .cart_lwr(cart_lwr), .cart_uwr(), .cart_time(), .cart_cas2(), .cart_data_wr(cart_data_wr), .cart_dma(),
 		.cart_m3_pause(1'b0), .ext_dtack(1'b0), .ext_dtack_hold(hold), .pal(1'b0), .jap(1'b0),
 		.tmss_enable(1'b0), .tmss_data(16'h0), .tmss_address(),
 		.m68k_addr(m68k_addr), .m68k_bus_do(m68k_bus_do), .m68k_di(m68k_bus_do),
@@ -125,10 +141,10 @@ module tb;
 		.ext_VCLK_i(cpu_clk), .ext_ZCLK_i(ZCLK),
 		.ext_VCLK_arb_i((ARB != 0) ? arb_clk : VCLK),
 		.V_R(vr), .V_G(vg), .V_B(vb), .V_HS(), .V_VS(), .V_CS(),
-		.A_L(), .A_R(), .A_L_2612(), .A_R_2612(), .MOL(), .MOR(), .MOL_2612(), .MOR_2612(), .PSG(), .DAC_ch_index(), .fm_sel23(),
-		.PA_i(7'h7F), .PA_o(PA_o), .PA_d(PA_d), .PB_i(7'h7F), .PB_o(PB_o), .PB_d(PB_d), .PC_i(7'h7F), .PC_o(PC_o), .PC_d(PC_d),
+		.A_L(), .A_R(), .A_L_2612(aL), .A_R_2612(aR), .MOL(), .MOR(), .MOL_2612(), .MOR_2612(), .PSG(),  .DAC_ch_index(), .fm_sel23(),
+		.PA_i(pad_a), .PA_o(PA_o), .PA_d(PA_d), .PB_i(7'h7F), .PB_o(PB_o), .PB_d(PB_d), .PC_i(7'h7F), .PC_o(PC_o), .PC_d(PC_d),
 		.vdp_hclk1(vhclk1), .vdp_intfield(), .vdp_de_h(vde_h), .vdp_de_v(vde_v), .vdp_m5(), .vdp_rs1(), .vdp_m2(), .vdp_lcb(), .vdp_psg_clk1(),
-		.vdp_cramdot_dis(1'b1), .fm_clk1(), .vdp_hsync2(), .vdp_vsync2(), .ym2612_status_enable(1'b0),
+		.vdp_cramdot_dis(1'b1), .fm_clk1(), .vdp_hsync2(), .vdp_vsync2(vvs), .ym2612_status_enable(1'b0),
 		.dma_68k_req(1'b0), .dma_z80_req(1'b0), .dma_z80_ack(), .res_z80(), .vdp_dma_oe_early(cart_oe), .vdp_dma(vdp_dma), .spr_unlimited(SPRU != 0)
 	);
 
@@ -142,6 +158,7 @@ module tb;
 		end
 		if(ram_68k_wren && ram_68k_address == 15'h6010 && (ram_68k_data == 16'h600D || ram_68k_data == 16'h0BAD) && ram_68k_byteena == 2'b11) begin
 			fin = ram_68k_data;
+			$display("PSGVOL %h %h %h %h tone %h %h %h noise %h", md_board.ym.vdp.l655, md_board.ym.vdp.l656, md_board.ym.vdp.l657, md_board.ym.vdp.l658, md_board.ym.vdp.l659, md_board.ym.vdp.l660, md_board.ym.vdp.l661, md_board.ym.vdp.l662);
 			$display("RESULT period=%0d arb=%0d hold=%0d lat=%0d status=%s cycles=%0d fetches=%0d d2=%04X%04X d1=%04X%04X z80sum=%04X%04X vramsum=%04X%04X dmasum=%04X%04X vdp=%04X ram0=%04X%04X ram7=%04X%04X ramsum=%08X",
 				PERIOD, ARB, HOLD, LAT, fin == 16'h600D ? "OK" : "TRAP", cyc - first_wr, fetches,
 				wram[16'h6000], wram[16'h6001], wram[16'h6002], wram[16'h6003], wram[16'h6004], wram[16'h6005], wram[16'h6006], wram[16'h6007], wram[16'h600A], wram[16'h600B], wram[16'h6009],
@@ -220,6 +237,83 @@ module tb;
 	always @(posedge clk) if(VLOG != 0) begin
 		vwe_old <= md_board.vram_snoop_we; va_old <= md_board.vram_snoop_addr; vd_old <= md_board.vram_snoop_data;
 		if(vwe_old & ~md_board.vram_snoop_we) $fdisplay(vfd, "%04X %02X", va_old, vd_old);
+	end
+
+	// +PROBE=3: bus state every 20000 cycles after reset (hang hunting)
+	always @(posedge clk) if(PROBE == 3 && cyc > 1300000 && cyc % 20000 == 0)
+		$display("BUS %0d AS=%b DTACK=%b BR=%b BG=%b BGACK=%b ZBR=%b ZBAK=%b ZRES=%b MREQ=%b ZA=%04X VA=%06X WAIT=%b RW=%b", cyc,
+			md_board.AS, md_board.DTACK, md_board.BR, md_board.BG, md_board.BGACK, md_board.ZBR, md_board.ZBAK, md_board.ZRES,
+			md_board.MREQ, md_board.ZA, {md_board.VA,1'b0}, md_board.WAIT, md_board.RW);
+
+	wire cart_lwr; wire [15:0] cart_data_wr;
+	wire [17:0] aL, aR;
+	wire vvs;
+
+	// SSF mapper writes
+	reg old_lwr = 0;
+	always @(posedge clk) begin
+		old_lwr <= cart_lwr;
+		if(GAME != 0 && cart_lwr && !old_lwr && {cart_address, 1'b0} >= 24'hA130F2 && {cart_address, 1'b0} <= 24'hA130FE)
+			ssf_bank[cart_address[2:0]] <= cart_data_wr[3:0];
+	end
+
+	// pad 1: Start held for 10 frames from frame START1 and START2
+	integer gframe = 0;
+	wire th = PA_d[6] ? 1'b1 : PA_o[6];
+	wire start_dn = (START1 >= 0 && gframe >= START1 && gframe < START1 + 10) || (START2 >= 0 && gframe >= START2 && gframe < START2 + 10);
+	wire [6:0] pad_a = th ? 7'h7F : {1'b0, ~start_dn, 1'b1, 2'b00, 2'b11};
+
+	// frame counter, YM2612 write log and audio dump (one stereo sample every 2048 clocks, 52.4 kHz)
+	integer yfd = 0, afd = 0;
+	reg old_vs = 1, old_ymwr = 0;
+	reg [9:0] ylast = 0;
+	initial if(GAME != 0) begin yfd = $fopen("ymlog.txt", "w"); afd = $fopen("audio.raw", "wb"); end
+	always @(posedge clk) if(GAME != 0) begin
+		old_vs <= vvs;
+		if(old_vs & ~vvs) begin
+			gframe = gframe + 1;
+			$fdisplay(yfd, "F %0d", gframe);
+			if(gframe % 30 == 0) $display("frame %0d cyc %0d", gframe, cyc);
+			if(FRAMES != 0 && gframe >= FRAMES) $finish;
+		end
+		old_ymwr <= ~md_board.ym.fm_cs & ~md_board.ym.ZWR_i;
+		if(~md_board.ym.fm_cs & ~md_board.ym.ZWR_i) ylast <= {md_board.ym.ZA_i[1:0], md_board.ym.ZD_i};
+		if(old_ymwr & ~(~md_board.ym.fm_cs & ~md_board.ym.ZWR_i))
+			$fdisplay(yfd, "W %0d %02X", ylast[9:8], ylast[7:0]);
+		if(cyc % 2048 == 0) begin
+			$fwrite(afd, "%c%c%c%c", aL[9:2], aL[17:10], aR[9:2], aR[17:10]);
+		end
+	end
+
+	// +SNAP=n: write every n-th frame as snap_<frame>.ppm (active area)
+	integer SNAP = 0, sfd = 0, sx = 0, sy = -1;
+	initial if($value$plusargs("SNAP=%d", SNAP)) ;
+	reg s_deh = 0, s_dev = 0, s_hclk = 0;
+	always @(posedge clk) if(GAME != 0 && SNAP != 0) begin
+		s_deh <= vde_h; s_dev <= vde_v; s_hclk <= vhclk1;
+		if(vde_v & ~s_dev) begin
+			sy = -1;
+			if(gframe % SNAP == 0) begin
+				string fn;
+				fn = $sformatf("snap_%0d.ppm", gframe);
+				sfd = $fopen(fn, "wb");
+				$fwrite(sfd, "P6%c320 224%c255%c", 8'd10, 8'd10, 8'd10);
+			end
+			else sfd = 0;
+		end
+		if(~vde_v & s_dev & sfd != 0) begin $fclose(sfd); sfd = 0; end
+		if(vde_h & ~s_deh & vde_v) begin sy = sy + 1; sx = 0; end
+		if(sfd != 0 && vde_h && vde_v && vhclk1 && !s_hclk && sx < 320 && sy < 224) begin
+			$fwrite(sfd, "%c%c%c", vr, vg, vb);
+			sx = sx + 1;
+		end
+	end
+
+	// +PROBE=4: PSG write strobes
+	reg old_w111 = 0;
+	always @(posedge clk) if(PROBE == 4) begin
+		old_w111 <= md_board.ym.vdp.w111;
+		if(md_board.ym.vdp.w111 != old_w111) $display("PSGW %0d w111=%b data=%02X fast=%b slow=%0d l635=%b t43=%b", cyc, md_board.ym.vdp.w111, md_board.ym.vdp.io_data[7:0], fast, cpu_slow, md_board.ym.vdp.l635, md_board.ym.vdp.t43);
 	end
 
 	function [31:0] ramsum(input integer dummy);
