@@ -9,7 +9,7 @@ options and a save fix for SVP carts:
 | **68K Speed** | Stock 7.6MHz, 10.7MHz, 13.4MHz, 17.9MHz, 17.9MHz Unsafe |
 | **Sprite Limit** | On (stock), Off |
 
-Copy `MegaDriveTREX_v6.rbf` (from the GitHub release) to `/media/fat/_Console/`. It sits next to the original core and
+Copy `MegaDriveTREX_v7.rbf` (from the GitHub release) to `/media/fat/_Console/`. It sits next to the original core and
 uses the same `MegaDrive` config name, so saves and settings are shared.
 
 ## 68K Speed
@@ -30,6 +30,9 @@ uses the same `MegaDrive` config name, so saves and settings are shared.
 * Writes to the VDP control port ($C00004-$C00007) also drop to stock speed for about 19 us, in
   every mode including Unsafe. Without it an overclocked 68000-to-VRAM DMA lost its first word
   and tiles were drawn shifted (black blocks and dashes all over the screen).
+* Writes to the PSG ($C00011-$C00017) drop to stock speed for about 19 us too, in every mode.
+  The PSG takes a new byte only every couple of Z80 clocks; back-to-back writes from a fast
+  68000 got mixed up and left a tone playing (Earthion's whistle at its logo).
 * SVP carts (Virtua Racing) always run the 68000 at stock speed.
 * 17.9 MHz is the ceiling. The Nuked 68000 needs at least 3 core-clock cycles per clock phase;
   21.5 MHz (a 2-cycle phase) fails at once in simulation.
@@ -94,13 +97,19 @@ cd sim/oc
 * `mkrom_spr2.py [h32] [mask]` builds 24 overlapping 16x16 sprites with flips and two palettes
   (`mask`: sprite 20 at X=0), plus a reference render; `cmp_spr.py` compares the bench's video output with it.
 
-Results (v6, release base). Copy `rtl/nuked-md/68k_*code.txt` into `sim/oc` first.
+Results (v7, release base). Copy `rtl/nuked-md/68k_*code.txt` into `sim/oc` first.
 
 * CPU test: 10.7 / 13.4 / 17.9 MHz identical to stock, also with the Z80-area slowdown and
   with the speed flipping every 331 clocks; 21.5 MHz fails.
 * VDP test: identical VRAM at every speed. Without the control-port slowdown, the DMA lost its
   first word at every overclocked speed; with the arbiter left at stock instead, Z80 RAM reads
   went wrong at 15.3 MHz and up.
+* PSG test (`mkrom_psg2.py`, Earthion's 12-byte PSG silence burst): without the PSG slowdown the
+  PSG is left with a tone at 13.4, 15.3 and 17.9 MHz depending on timing; with it the PSG is
+  silent at every speed and offset.
+* Whole-game run (`+GAME=1`, `rom_game.hex`, SSF mapper; logs YM2612 writes, audio and
+  screenshots): Earthion at 17.9 MHz played a 7.4 kHz tone at sound start before the fix,
+  nothing after it.
 * Sprite tests: Limit Off matches the reference in H40, H32 and with X=0 masking.
 
 Earlier results (v1, upstream main):
@@ -122,7 +131,7 @@ the reference, in H40, H32 and with an X=0 masking sprite.
 
 Quartus Prime Lite 17.0: open `MegaDrive.qpf` and compile, or
 `quartus_sh --flow compile MegaDrive -c MegaDrive`, then rename `output_files/MegaDrive.rbf`
-to `MegaDriveTREX.rbf`. Worst-case setup slack on the build laptop: v6 -2.24 ns; the untouched
+to `MegaDriveTREX.rbf`. Worst-case setup slack on the build laptop: v7 -2.24 ns; the untouched
 20260603 release built the same way gives -2.55 ns (its own 68000 data paths).
 
 ## Changed files
